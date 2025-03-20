@@ -1,0 +1,5 @@
+# Do not save personally uploaded files to GitHub
+uploads/*
+
+# Do not save pycache folder to GitHub
+__pycache__/*
