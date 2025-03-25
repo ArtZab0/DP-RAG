@@ -4,18 +4,24 @@ import torch
 import fitz  # PyMuPDF
 from sentence_transformers import SentenceTransformer
 
+
 # Global data structures to store document and chunk info
 documents = []   # List of dicts: {doc_id, filename, priority}
 all_chunks = []  # List of dicts: {doc_id, doc_name, chunk_text, embedding, priority, page_number?}
 document_counter = 0
 
+# Global constants and parameters
+chunk_length = 5    # 5 sentences per chunk
+
 # Set device (GPU if available) and load the embedding model
 device = "cuda" if torch.cuda.is_available() else "cpu"
 embedding_model = SentenceTransformer("all-mpnet-base-v2", device=device)
 
+
 def split_list(lst, chunk_size):
     """Splits a list into sublists of size 'chunk_size'."""
     return [lst[i:i+chunk_size] for i in range(0, len(lst), chunk_size)]
+
 
 def process_pdf(file_path, doc_id, doc_name, priority):
     """
@@ -27,12 +33,15 @@ def process_pdf(file_path, doc_id, doc_name, priority):
     """
     doc = fitz.open(file_path)
     for page in doc:
+        # Extract text, sentences, and chunks from each page
         text = page.get_text().replace("\n", " ").strip()
         sentences = [s.strip() for s in text.split(". ") if s.strip()]
-        chunk_size = 5  # adjust chunk size as needed
-        sentence_groups = split_list(sentences, chunk_size)
+        sentence_groups = split_list(sentences, chunk_length)
+
+        # Encode and save the chunks
         for group in sentence_groups:
             chunk_text = " ".join(group)
+            # Do not add the chunk if it has less than 30 characters (likely ill-formatted)
             if len(chunk_text) < 30:
                 continue
             embedding = embedding_model.encode(chunk_text, convert_to_numpy=True)
@@ -46,6 +55,7 @@ def process_pdf(file_path, doc_id, doc_name, priority):
             })
     doc.close()
 
+
 def process_text_file(file_path, doc_id, doc_name, priority):
     """
     Processes a plain text file:
@@ -56,10 +66,15 @@ def process_text_file(file_path, doc_id, doc_name, priority):
     """
     with open(file_path, 'r', encoding='utf-8') as f:
         text = f.read()
+
+    # Split document into sentences
     sentences = [s.strip() for s in text.split(". ") if s.strip()]
-    sentence_groups = split_list(sentences, 5)
+    sentence_groups = split_list(sentences, chunk_length)
+
+    # Encode and save the chunks
     for group in sentence_groups:
         chunk_text = " ".join(group)
+        # Do not add the chunk if it has less than 30 characters (likely ill-formatted)
         if len(chunk_text) < 30:
             continue
         embedding = embedding_model.encode(chunk_text, convert_to_numpy=True)

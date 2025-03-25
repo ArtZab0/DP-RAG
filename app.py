@@ -3,6 +3,9 @@ import numpy as np
 import torch
 from flask import Flask, request, redirect, url_for, render_template_string
 from sentence_transformers import util
+import fitz
+import base64
+
 from rag_backend import (
     documents, all_chunks, document_counter,
     process_pdf, process_text_file, embedding_model, device
@@ -13,6 +16,27 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
+
+
+## ALL ROUTES:
+# '/' (index):                  
+#   GET is homepage, 
+#   POST is posting a query
+
+# '/upload' (upload):           
+#   GET is page to upload docs, 
+#   POST runs RAG backend for PDF or text file
+
+# '/documents (documents_list): 
+#   GET is page to view and edit uploaded docs
+
+# '/update_priority/<int:doc_id>' (update_priority):
+#   GET opens form to update priority
+#   POST updates priority for doc and redirects to doc list
+
+# '/source/<int:doc_id>/<int:page_number>' (view_source):
+#   GET displays a specific page from a specific PDF document as a base64 image
+
 
 # Base HTML template using Bootstrap
 base_template = '''
@@ -41,12 +65,15 @@ base_template = '''
 </html>
 '''
 
+
 def render_page(title, content):
     """Helper: renders a full page with the base template."""
     return render_template_string(base_template.format(title=title, content=content))
 
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    # Collect the HTML to render as a string based on current state
     results_html = ""
     if request.method == 'POST':
         query = request.form.get('query')
@@ -59,18 +86,26 @@ def index():
                 embeddings_tensor = torch.tensor(embeddings, dtype=torch.float32).to(device)
                 query_embedding = embedding_model.encode(query, convert_to_tensor=True)
                 dot_scores = util.dot_score(query_embedding, embeddings_tensor)[0]
+
                 # Adjust score by document priority bonus
-                beta = 0.1
-                bonus = torch.tensor([beta * (chunk["priority"] - 1) for chunk in all_chunks],
+                beta = 0.02     # Multiplicative bonus of 2% towards similarity for each priority 1-10
+                bonus = torch.tensor([beta * (chunk["priority"]) for chunk in all_chunks],
                                      dtype=torch.float32).to(device)
-                adjusted_scores = dot_scores + bonus
+                adjusted_scores = dot_scores * (1+bonus)
                 topk = torch.topk(adjusted_scores, k=min(5, len(all_chunks)))
+
+                # Add query results to HTML
                 results_html += f"<h2>Results for query: <em>{query}</em></h2>"
                 for score, idx in zip(topk.values.cpu().numpy(), topk.indices.cpu().numpy()):
+                    # Get all info about the chunk
                     chunk = all_chunks[idx]
+
+                    # If the document is a PDF, display which page it is from and link the PDF
                     view_source_link = ""
                     if "page_number" in chunk:
                         view_source_link = f'''<a href="{url_for('view_source', doc_id=chunk['doc_id'], page_number=chunk['page_number'])}" class="btn btn-link">View Source</a>'''
+                    
+                    # Add chunk document, priority, score, text, and link to results
                     results_html += f'''
                     <div class="card mb-3">
                       <div class="card-body">
@@ -81,8 +116,11 @@ def index():
                       </div>
                     </div>
                     '''
+
+        # No query included in POST
         else:
             results_html += "<div class='alert alert-warning'>Please enter a query.</div>"
+
     content = '''
     <form method="post" class="mb-4">
       <div class="form-group">
@@ -141,6 +179,7 @@ def upload():
     '''.format(url_for('index'))
     return render_page("Upload Document", content)
 
+
 @app.route('/documents')
 def documents_list():
     content = "<h2>Uploaded Documents</h2><ul class='list-group'>"
@@ -155,11 +194,13 @@ def documents_list():
         url_for('upload'), url_for('index'))
     return render_page("Uploaded Documents", content)
 
+
 @app.route('/update_priority/<int:doc_id>', methods=['GET', 'POST'])
 def update_priority(doc_id):
     doc = next((d for d in documents if d["doc_id"] == doc_id), None)
     if not doc:
         return "Document not found", 404
+    
     if request.method == 'POST':
         new_priority = request.form.get('priority', type=int)
         doc["priority"] = new_priority
@@ -168,6 +209,7 @@ def update_priority(doc_id):
             if chunk.get("doc_id") == doc_id:
                 chunk["priority"] = new_priority
         return redirect(url_for('documents_list'))
+    
     content = f'''
     <h2>Update Priority for Document {doc_id}</h2>
     <form method="post">
@@ -182,25 +224,29 @@ def update_priority(doc_id):
     '''
     return render_page("Update Priority", content)
 
+
 @app.route('/source/<int:doc_id>/<int:page_number>')
 def view_source(doc_id, page_number):
-    import fitz
-    import base64
     # Find the document info by doc_id
     doc_info = next((d for d in documents if d["doc_id"] == doc_id), None)
     if not doc_info:
         return "Document not found", 404
+    
     file_path = os.path.join(app.config['UPLOAD_FOLDER'], doc_info["filename"])
     pdf_doc = fitz.open(file_path)
     if page_number < 0 or page_number >= pdf_doc.page_count:
         pdf_doc.close()
         return "Page not found", 404
+    
     page = pdf_doc[page_number]
     pix = page.get_pixmap(dpi=150)
     pdf_doc.close()
+
     # Encode image as base64 to embed in HTML
     image_bytes = pix.tobytes("png")
     encoded = base64.b64encode(image_bytes).decode("utf-8")
+
+    # Display the selected page as base64 image in the HTML
     html = f'''
     <!DOCTYPE html>
     <html lang="en">
