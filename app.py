@@ -5,12 +5,14 @@ from flask import Flask, request, redirect, url_for, render_template_string
 from sentence_transformers import util
 import fitz
 import base64
+from openai import AuthenticationError
 
 from rag_backend import (
     documents, all_chunks, document_counter,
     process_pdf, process_text_file, embedding_model, device
 )
 import rag_backend  # for updating the document_counter
+import chat
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -38,7 +40,7 @@ if not os.path.exists(app.config['UPLOAD_FOLDER']):
 #   GET displays a specific page from a specific PDF document as a base64 image
 
 
-# Base HTML template using Bootstrap
+# Base HTML template using Bootstrap and Markdown-Tag
 base_template = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -63,6 +65,7 @@ base_template = '''
   </div>
 </body>
 </html>
+<script src="https://cdn.jsdelivr.net/gh/MarketingPipeline/Markdown-Tag/markdown-tag.js"></script> 
 '''
 
 
@@ -93,6 +96,36 @@ def index():
                                      dtype=torch.float32).to(device)
                 adjusted_scores = dot_scores * (1+bonus)
                 topk = torch.topk(adjusted_scores, k=min(5, len(all_chunks)))
+
+                # Actually query the Qwen model
+                docs = [(all_chunks[i])["chunk_text"] for i in topk.indices.cpu().numpy()]
+
+                try:
+                    response = chat.query(
+                        user_query=query,
+                        documents_text=docs,
+                        documents_priorities=topk.values.cpu().numpy(),
+                        b64_image_urls=[]
+                    )
+
+                    print("\n\n\nRESPONSE:\n\n\n")
+                    print(response)
+
+                    # HTML for query response
+                    results_html += f'''
+                    <div class="card mb-3">
+                      <div class="card-body">
+                        <h5 class="card-title">Response:</h5>
+                        <p class="card-text"><md>{response}</md></p>
+                      </div>
+                    </div>
+                    '''
+                except KeyError:
+                    results_html += "<div class='alert alert-warning'>Make sure that OPENROUTER_API_KEY is defined in your environment variables.</div>"
+                except AuthenticationError:
+                    results_html += "<div class='alert alert-warning'>Invalid API Key found in env variables.</div>"
+                except:
+                    results_html += "<div class='alert alert-warning'>Unable to complete query.</div>"
 
                 # Add query results to HTML
                 results_html += f"<h2>Results for query: <em>{query}</em></h2>"
@@ -137,6 +170,7 @@ def index():
     <div>{results}</div>
     '''.format(url_for('upload'), url_for('documents_list'), results=results_html)
     return render_page("Local RAG Web Interface", content)
+
 
 @app.route('/upload', methods=['GET', 'POST'])
 def upload():

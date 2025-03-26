@@ -44,7 +44,7 @@ def query(user_query: str, documents_text: list[str], documents_priorities: list
   
   # Add images to message content
   for b64_image_url in b64_image_urls:
-    messages["content"].append(
+    messages[0]["content"].append(
       {
         "type": "image_url",
         "image_url": {
@@ -66,13 +66,13 @@ def query(user_query: str, documents_text: list[str], documents_priorities: list
   # Create the query using text from the document
   full_query_with_context = ""
   for i, document_text in enumerate(documents_text):
-    full_query_with_context += f"DOCUMENT {i}: (Priority {documents_priorities[i]}\n{document_text}\n)"
+    full_query_with_context += f"DOCUMENT {i}: (Priority {documents_priorities[i]})\n{document_text}\n)"
 
   full_query_with_context += f"QUESTION:\n{user_query}\n"
 
   full_query_with_context += "INSTRUCTIONS: Answer the user's QUESTION using the text from the DOCUMENTS and content of the IMAGES above. Keep your answer ground in the facts of the DOCUMENTS. If the DOCUMENTS do not contain the facts to answer the QUESTION return {NONE}"
 
-  messages["content"].append(
+  messages[0]["content"].append(
     {
       "type": "text",
       "text": full_query_with_context
@@ -88,5 +88,26 @@ def query(user_query: str, documents_text: list[str], documents_priorities: list
     model=model_to_use,
     messages=messages
   )
-  print(completion.choices[0].message.content)
   return completion.choices[0].message.content
+
+
+# Demo run
+if __name__=="__main__":
+   q = "Would George like a pickle? How about Lucy?"
+
+   documents = [
+      "Hi! My name is George and I like Pickles, my cat. Not the food, though.",
+      "Hi! My name is Lucy and I like pickles and my cat."
+   ]
+
+   doc_priorities = [
+      5,
+      1
+   ]
+
+    # Test later
+   images = []
+
+   response = query(user_query=q, documents_text=documents, documents_priorities=doc_priorities, b64_image_urls=images)
+   print(response)
+
