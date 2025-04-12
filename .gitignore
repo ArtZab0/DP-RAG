@@ -3,3 +3,5 @@ uploads/*
 
 # Do not save pycache folder to GitHub
 __pycache__/*
+
+.env

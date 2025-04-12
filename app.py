@@ -11,6 +11,7 @@ from rag_backend import (
     documents, all_chunks, document_counter,
     process_pdf, process_text_file, embedding_model, device
 )
+from evaluations import run_evaluation, load_latest_results, calculate_summary_metrics
 import rag_backend  # for updating the document_counter
 import chat
 
@@ -166,9 +167,17 @@ def index():
       <a href="{}" class="btn btn-secondary">Upload Document</a>
       <a href="{}" class="btn btn-secondary">View Documents</a>
     </div>
+    
+    <div class="card mb-4 text-center">
+      <div class="card-body">
+        <h5 class="card-title">Evaluate System Performance</h5>
+        <p class="card-text">Compare Document Priority RAG against standard RAG</p>
+        <a href="{}" class="btn btn-primary btn-lg">Run Evaluation</a>
+      </div>
+    </div>
     <hr>
     <div>{results}</div>
-    '''.format(url_for('upload'), url_for('documents_list'), results=results_html)
+    '''.format(url_for('upload'), url_for('documents_list'), url_for('evaluations'), results=results_html)
     return render_page("Local RAG Web Interface", content)
 
 
@@ -299,6 +308,211 @@ def view_source(doc_id, page_number):
     </html>
     '''
     return html
+
+@app.route('/evaluations')
+def evaluations():
+    content = '''
+    <div class="text-center">
+        <h2>DP-RAG System Evaluation</h2>
+        <p class="lead mb-4">Compare the performance of Document Priority RAG against standard RAG</p>
+        
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Start New Evaluation</h5>
+                <p class="card-text">Run a comprehensive evaluation comparing DP-RAG against standard RAG using your uploaded documents.</p>
+                <a href="{}" class="btn btn-primary btn-lg">Start Evaluation</a>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">View Previous Results</h5>
+                <p class="card-text">Check the results of previous evaluation runs.</p>
+                <a href="{}" class="btn btn-secondary btn-lg">View Results</a>
+            </div>
+        </div>
+    </div>
+    '''.format(url_for('run_evaluation_route'), url_for('view_results'))
+    return render_page("System Evaluation", content)
+
+@app.route('/run_evaluation', methods=['GET', 'POST'])
+def run_evaluation_route():
+    if request.method == 'POST':
+        try:
+            num_questions = int(request.form.get('num_questions', 5))
+            results = run_evaluation(num_questions)
+            return redirect(url_for('view_results'))
+        except Exception as e:
+            return render_page("Run Evaluation", f'''
+                <div class="alert alert-danger">Error running evaluation: {str(e)}</div>
+                <a href="{url_for('evaluations')}" class="btn btn-primary">Back to Evaluation Home</a>
+            ''')
+    
+    content = '''
+    <h2>Run New Evaluation</h2>
+    <div class="card">
+        <div class="card-body">
+            <form method="post" class="mb-4">
+                <div class="form-group">
+                    <label for="num_questions">Number of Test Questions:</label>
+                    <input type="number" class="form-control" id="num_questions" name="num_questions" 
+                           value="5" min="1" max="10" required>
+                    <small class="form-text text-muted">Choose how many test questions to generate (1-10)</small>
+                </div>
+                <button type="submit" class="btn btn-primary btn-lg">Start Evaluation</button>
+                <a href="{}" class="btn btn-secondary">Back</a>
+            </form>
+        </div>
+    </div>
+    '''.format(url_for('evaluations'))
+    return render_page("Run Evaluation", content)
+
+@app.route('/view_results')
+def view_results():
+    results_html = ""
+    latest_results = load_latest_results()
+    
+    if not latest_results:
+        content = '''
+        <div class="text-center">
+            <h2>No Evaluation Results</h2>
+            <p class="lead">No evaluation results found. Run an evaluation first.</p>
+            <a href="{}" class="btn btn-primary btn-lg">Run New Evaluation</a>
+        </div>
+        '''.format(url_for('run_evaluation_route'))
+        return render_page("Evaluation Results", content)
+    
+    # Calculate and display summary metrics
+    summary = calculate_summary_metrics(latest_results)
+    results_html = f'''
+    <h2>Evaluation Summary</h2>
+    <div class="card mb-4">
+        <div class="card-body">
+            <h3>Performance Metrics</h3>
+            <div class="table-responsive">
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>DP-RAG</th>
+                            <th>Standard RAG</th>
+                            <th>Improvement</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Relevance</td>
+                            <td>{summary["dp_rag"]["scores"]["relevance"]:.2f}</td>
+                            <td>{summary["std_rag"]["scores"]["relevance"]:.2f}</td>
+                            <td class="{'text-success' if summary["improvements"]["relevance"] > 0 else 'text-danger'}">
+                                {summary["improvements"]["relevance"]:+.1f}%
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Accuracy</td>
+                            <td>{summary["dp_rag"]["scores"]["accuracy"]:.2f}</td>
+                            <td>{summary["std_rag"]["scores"]["accuracy"]:.2f}</td>
+                            <td class="{'text-success' if summary["improvements"]["accuracy"] > 0 else 'text-danger'}">
+                                {summary["improvements"]["accuracy"]:+.1f}%
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Comprehensiveness</td>
+                            <td>{summary["dp_rag"]["scores"]["comprehensiveness"]:.2f}</td>
+                            <td>{summary["std_rag"]["scores"]["comprehensiveness"]:.2f}</td>
+                            <td class="{'text-success' if summary["improvements"]["comprehensiveness"] > 0 else 'text-danger'}">
+                                {summary["improvements"]["comprehensiveness"]:+.1f}%
+                            </td>
+                        </tr>
+                        <tr class="table-active font-weight-bold">
+                            <td>Overall Score</td>
+                            <td>{summary["dp_rag"]["overall"]:.2f}</td>
+                            <td>{summary["std_rag"]["overall"]:.2f}</td>
+                            <td class="{'text-success' if summary["improvements"]["overall"] > 0 else 'text-danger'}">
+                                {summary["improvements"]["overall"]:+.1f}%
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <h3 class="mt-4">Win Rate Analysis</h3>
+            <div class="table-responsive">
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>System</th>
+                            <th>Win Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>DP-RAG Wins</td>
+                            <td>{summary["win_rates"]["dp_rag"]:.1f}%</td>
+                        </tr>
+                        <tr>
+                            <td>Standard RAG Wins</td>
+                            <td>{summary["win_rates"]["std_rag"]:.1f}%</td>
+                        </tr>
+                        <tr>
+                            <td>Ties</td>
+                            <td>{summary["win_rates"]["tie"]:.1f}%</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="mt-3">
+                <small class="text-muted">
+                    Based on {summary["total_questions"]} test questions. 
+                    Scores range from 1-10, with higher scores being better.
+                </small>
+            </p>
+        </div>
+    </div>
+    
+    <h2>Detailed Results</h2>
+    '''
+    for result in latest_results:
+        results_html += f'''
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4>Question: {result["question"]}</h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>DP-RAG Response:</h5>
+                        <p>{result["dp_rag_response"]}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h5>Standard RAG Response:</h5>
+                        <p>{result["standard_rag_response"]}</p>
+                    </div>
+                </div>
+                <hr>
+                <h5>Evaluation:</h5>
+                <pre class="evaluation-results">{result["evaluation"]}</pre>
+            </div>
+        </div>
+        '''
+    
+    content = f'''
+    <div class="mb-4">
+        <a href="{url_for('run_evaluation_route')}" class="btn btn-primary">Run New Evaluation</a>
+        <a href="{url_for('evaluations')}" class="btn btn-secondary">Back to Evaluation Home</a>
+    </div>
+    <hr>
+    {results_html}
+    <style>
+        .evaluation-results {{
+            white-space: pre-wrap;
+            background-color: #f8f9fa;
+            padding: 1rem;
+            border-radius: 0.25rem;
+        }}
+    </style>
+    '''
+    return render_page("Evaluation Results", content)
 
 if __name__ == '__main__':
     app.run(debug=True)
