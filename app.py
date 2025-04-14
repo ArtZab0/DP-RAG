@@ -85,17 +85,20 @@ def index():
             if not all_chunks:
                 results_html += "<div class='alert alert-warning'>No documents uploaded yet.</div>"
             else:
-                # Stack embeddings into a tensor
-                embeddings = np.stack([chunk["embedding"] for chunk in all_chunks])
-                embeddings_tensor = torch.tensor(embeddings, dtype=torch.float32).to(device)
-                query_embedding = embedding_model.encode(query, convert_to_tensor=True)
-                dot_scores = util.dot_score(query_embedding, embeddings_tensor)[0]
+                if not all_chunks:
+                    results_html += "<div class='alert alert-warning'>No documents available.</div>"
+                else:
+                    # Stack embeddings into a tensor
+                    embeddings = np.stack([chunk["embedding"] for chunk in all_chunks])
+                    embeddings_tensor = torch.tensor(embeddings, dtype=torch.float32).to(device)
+                    query_embedding = embedding_model.encode(query, convert_to_tensor=True).to(device)
+                    dot_scores = util.dot_score(query_embedding, embeddings_tensor)[0]
 
-                # Adjust score by document priority bonus
-                beta = 0.02     # Multiplicative bonus of 2% towards similarity for each priority 1-10
-                bonus = torch.tensor([beta * (chunk["priority"]) for chunk in all_chunks],
-                                     dtype=torch.float32).to(device)
-                adjusted_scores = dot_scores * (1+bonus)
+                    # Adjust score by document priority bonus
+                    beta = 0.02     # Multiplicative bonus of 2% towards similarity for each priority 1-10
+                    bonus = torch.tensor([beta * (chunk["priority"]) for chunk in all_chunks],
+                                       dtype=torch.float32).to(device)
+                    adjusted_scores = dot_scores * (1+bonus)
                 topk = torch.topk(adjusted_scores, k=min(5, len(all_chunks)))
 
                 # Actually query the Qwen model

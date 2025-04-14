@@ -42,20 +42,20 @@ Generate {num_questions} questions, focusing on key information and specific det
     questions = [q.strip() for q in response.split("\n") if q.strip() and "?" in q]
     return questions[:num_questions]
 
-def run_rag_query(query: str, use_priorities: bool = True) -> Tuple[str, List[Dict]]:
+def run_rag_query(query2: str, use_priorities: bool = True) -> Tuple[str, List[Dict]]:
     """Run a RAG query with or without document priorities."""
     if not all_chunks:
         return "No documents available.", []
     
-    # Stack embeddings into a tensor
-    embeddings = torch.stack([torch.tensor(chunk["embedding"]) for chunk in all_chunks])
-    query_embedding = embedding_model.encode(query, convert_to_tensor=True)
+    # Convert embeddings to tensors and move to correct device
+    embeddings = torch.stack([torch.tensor(chunk["embedding"], device=device) for chunk in all_chunks])
+    query_embedding = embedding_model.encode(query2, convert_to_tensor=True).to(device)
     dot_scores = util.dot_score(query_embedding, embeddings)[0]
     
     if use_priorities:
         # Apply priority bonus (same as in app.py)
         beta = 0.02
-        bonus = torch.tensor([beta * chunk["priority"] for chunk in all_chunks])
+        bonus = torch.tensor([beta * chunk["priority"] for chunk in all_chunks], device=device)
         scores = dot_scores * (1 + bonus)
     else:
         scores = dot_scores
@@ -67,7 +67,7 @@ def run_rag_query(query: str, use_priorities: bool = True) -> Tuple[str, List[Di
     # Query the model using existing chat.py functionality
     from chat import query
     response = query(
-        user_query=query,
+        user_query=query2,
         documents_text=chunk_texts,
         documents_priorities=[chunk["priority"] for chunk in selected_chunks],
         b64_image_urls=[]

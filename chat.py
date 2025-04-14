@@ -66,11 +66,11 @@ def query(user_query: str, documents_text: list[str], documents_priorities: list
   # Create the query using text from the document
   full_query_with_context = ""
   for i, document_text in enumerate(documents_text):
-    full_query_with_context += f"DOCUMENT {i}: (Priority {documents_priorities[i]})\n{document_text}\n)"
+    full_query_with_context += f"DOCUMENT {i}: (Priority {documents_priorities[i]})\n{document_text}\n\n"
 
-  full_query_with_context += f"QUESTION:\n{user_query}\n"
+  full_query_with_context += f"QUESTION:\n{user_query}\n\n"
 
-  full_query_with_context += "INSTRUCTIONS: Answer the user's QUESTION using the text from the DOCUMENTS and content of the IMAGES above. Keep your answer ground in the facts of the DOCUMENTS. If the DOCUMENTS do not contain the facts to answer the QUESTION return {NONE}"
+  full_query_with_context += "INSTRUCTIONS: Answer the user's QUESTION using the text from the DOCUMENTS and content of the IMAGES above. Keep your answer ground in the facts of the DOCUMENTS. If the DOCUMENTS do not contain enough information to answer the QUESTION, respond with 'The provided documents do not contain sufficient information to answer this question.'"
 
   messages[0]["content"].append(
     {
@@ -110,4 +110,3 @@ if __name__=="__main__":
 
    response = query(user_query=q, documents_text=documents, documents_priorities=doc_priorities, b64_image_urls=images)
    print(response)
-
