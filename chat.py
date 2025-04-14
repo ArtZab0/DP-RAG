@@ -66,7 +66,7 @@ def query(user_query: str, documents_text: list[str], documents_priorities: list
   # Create the query using text from the document
   full_query_with_context = ""
   for i, document_text in enumerate(documents_text):
-    full_query_with_context += f"DOCUMENT {i}: (Priority {documents_priorities[i]})\n{document_text}\n\n"
+    full_query_with_context += f"DOCUMENT {i}: \n{document_text}\n\n"
 
   full_query_with_context += f"QUESTION:\n{user_query}\n\n"
 
