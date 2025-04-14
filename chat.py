@@ -86,7 +86,8 @@ def query(user_query: str, documents_text: list[str], documents_priorities: list
   completion = client.chat.completions.create(
     extra_body={},
     model=model_to_use,
-    messages=messages
+    messages=messages,
+    temperature=0
   )
   return completion.choices[0].message.content
 
