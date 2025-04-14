@@ -34,7 +34,8 @@ Generate {num_questions} questions, focusing on key information and specific det
 
     completion = client.chat.completions.create(
         model="qwen/qwen2.5-32b-instruct:free",
-        messages=messages
+        messages=messages,
+        temperature=0
     )
     
     # Parse response into list of questions
@@ -119,7 +120,8 @@ Explanation: [Provide a brief explanation of your scoring, highlighting key diff
 
     completion = client.chat.completions.create(
         model="qwen/qwen2.5-32b-instruct:free",
-        messages=messages
+        messages=messages,
+        temperature=0
     )
     
     return {
