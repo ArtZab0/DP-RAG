@@ -2,7 +2,7 @@ import os
 from openai import OpenAI
 
 
-def query(user_query: str, documents_text: list[str], documents_priorities: list[int], b64_image_urls: list[str], model_to_use: str='qwen/qwen2.5-vl-32b-instruct:free'):
+def query(user_query: str, documents_text: list[str], documents_priorities: list[int], b64_image_urls: list[str], model_to_use: str='meta-llama/llama-4-scout'):
   '''
     Query an LLM given RAG context.
 

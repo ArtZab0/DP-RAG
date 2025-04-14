@@ -33,7 +33,7 @@ Generate {num_questions} questions, focusing on key information and specific det
     }]
 
     completion = client.chat.completions.create(
-        model="qwen/qwen2.5-32b-instruct:free",
+        model="meta-llama/llama-4-scout",
         messages=messages,
         temperature=0
     )
@@ -119,7 +119,7 @@ Explanation: [Provide a brief explanation of your scoring, highlighting key diff
     }]
 
     completion = client.chat.completions.create(
-        model="qwen/qwen2.5-32b-instruct:free",
+        model="meta-llama/llama-4-scout",
         messages=messages,
         temperature=0
     )
